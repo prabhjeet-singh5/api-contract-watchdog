@@ -1,0 +1,68 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "firstName": "Demo",
+      "lastName": "User",
+      "maidenName": "",
+      "age": 30,
+      "gender": "female",
+      "email": "demo@example.invalid",
+      "phone": "+1 555-0100",
+      "username": "demo_user",
+      "password": "FAKE-DUMMYJSON-FIXTURE-NOT-A-SECRET",
+      "birthDate": "1996-1-1",
+      "image": "https://example.invalid/avatar.png",
+      "bloodGroup": "O+",
+      "height": 170.0,
+      "weight": 65.0,
+      "eyeColor": "Brown",
+      "hair": {"color": "Brown", "type": "Straight"},
+      "ip": "192.0.2.1",
+      "address": {
+        "address": "1 Demo Street",
+        "city": "Demo City",
+        "state": "Demo State",
+        "stateCode": "DS",
+        "postalCode": "00001",
+        "coordinates": {"lat": 12.0, "lng": 34.0},
+        "country": "Demo Country"
+      },
+      "macAddress": "00:00:00:00:00:01",
+      "university": "Demo University",
+      "bank": {
+        "cardExpire": "01/30",
+        "cardNumber": "0000000000000000",
+        "cardType": "Demo",
+        "currency": "USD",
+        "iban": "DEMO-NOT-A-REAL-IBAN"
+      },
+      "company": {
+        "department": "Engineering",
+        "name": "Demo Company",
+        "title": "Developer",
+        "address": {
+          "address": "2 Demo Street",
+          "city": "Demo City",
+          "state": "Demo State",
+          "stateCode": "DS",
+          "postalCode": "00002",
+          "coordinates": {"lat": 12.0, "lng": 34.0},
+          "country": "Demo Country"
+        }
+      },
+      "ein": "DEMO-EIN",
+      "ssn": "DEMO-SSN",
+      "userAgent": "Offline Test Fixture",
+      "crypto": {
+        "coin": "Demo Coin",
+        "wallet": "DEMO-NOT-A-REAL-WALLET",
+        "network": "Demo Network"
+      },
+      "role": "user"
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 1
+}

@@ -1,0 +1,13 @@
+# HTTP calls and response validation
+httpx==0.28.1
+pydantic==2.11.7
+
+# Offline tests
+pytest==8.4.1
+
+# FastAPI is used only by the mock API; Uvicorn runs that server.
+fastapi==0.116.1
+uvicorn==0.35.0
+
+# Load local configuration from .env in later phases.
+python-dotenv==1.1.1

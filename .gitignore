@@ -1,0 +1,27 @@
+# Local environment and credentials
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Python and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Watchdog runtime state (keep the directory placeholder)
+data/*
+!data/.gitkeep
+
+# Local editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

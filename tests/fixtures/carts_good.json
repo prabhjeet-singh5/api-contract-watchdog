@@ -1,0 +1,27 @@
+{
+  "carts": [
+    {
+      "id": 1,
+      "products": [
+        {
+          "id": 1,
+          "title": "Demo Notebook",
+          "price": 9.99,
+          "quantity": 2,
+          "total": 19.98,
+          "discountPercentage": 10.0,
+          "discountedTotal": 17.98,
+          "thumbnail": "https://example.invalid/notebook-thumb.png"
+        }
+      ],
+      "total": 19.98,
+      "discountedTotal": 17.98,
+      "userId": 1,
+      "totalProducts": 1,
+      "totalQuantity": 2
+    }
+  ],
+  "total": 1,
+  "skip": 0,
+  "limit": 1
+}
