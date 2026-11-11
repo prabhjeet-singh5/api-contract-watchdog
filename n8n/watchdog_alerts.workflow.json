@@ -1,0 +1,81 @@
+{
+  "name": "API contract watchdog alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api-contract-watchdog",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "0f3c1d6e-5a7b-4c2e-9f10-1a2b3c4d5e01",
+      "name": "Watchdog webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "0f3c1d6e-5a7b-4c2e-9f10-1a2b3c4d5e00"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate the watchdog payload, then build one Slack message from it.\n// Throwing makes n8n answer the webhook with an error, so the watchdog\n// falls back to its own Slack webhook instead of losing the alert.\nconst body = $input.first().json.body;\nif (\n  !body ||\n  body.source !== 'api-contract-watchdog' ||\n  body.version !== 1 ||\n  !Array.isArray(body.changes)\n) {\n  throw new Error('Not an api-contract-watchdog version 1 alert payload.');\n}\n\n// Slack treats &, < and > as markup.\nconst escape = (value) =>\n  String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nconst duration = (from, to) => {\n  let seconds = Math.max(Math.floor((Date.parse(to) - Date.parse(from)) / 1000), 0);\n  const hours = Math.floor(seconds / 3600);\n  const minutes = Math.floor((seconds % 3600) / 60);\n  seconds %= 60;\n  if (hours) return `${hours}h ${minutes}m`;\n  if (minutes) return `${minutes}m ${seconds}s`;\n  return `${seconds}s`;\n};\n\nconst lines = [`*API contract watchdog:* ${escape(body.summary)}`];\nfor (const change of body.changes) {\n  if (change.change === 'failed') {\n    lines.push(\n      `:red_circle: *FAILED* \\`${escape(change.endpoint)}\\`: ${escape(change.failed_checks.join(', '))}`\n    );\n    for (const detail of change.details) {\n      lines.push(`    • ${escape(detail)}`);\n    }\n  } else {\n    lines.push(\n      `:large_green_circle: *RECOVERED* \\`${escape(change.endpoint)}\\` after ${duration(change.failing_since, change.at)}`\n    );\n  }\n}\nif (body.run_url) {\n  lines.push(`<${body.run_url}|View the run>`);\n}\n\nreturn [{ json: { text: lines.join('\\n') } }];\n"
+      },
+      "id": "0f3c1d6e-5a7b-4c2e-9f10-1a2b3c4d5e02",
+      "name": "Format Slack message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/REPLACE/WITH/YOUR-WEBHOOK",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.text }) }}",
+        "options": {}
+      },
+      "id": "0f3c1d6e-5a7b-4c2e-9f10-1a2b3c4d5e03",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Watchdog webhook": {
+      "main": [
+        [
+          {
+            "node": "Format Slack message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Slack message": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

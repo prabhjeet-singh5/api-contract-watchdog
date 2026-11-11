@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "source": "api-contract-watchdog",
+  "run_id": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+  "run_url": "https://github.com/prabhjeet-singh5/api-contract-watchdog/actions",
+  "finished_at": "2026-01-01T12:00:00Z",
+  "summary": "1 endpoint(s) failed, 1 recovered.",
+  "text": "API contract watchdog: 1 endpoint(s) failed, 1 recovered.\nFAILED carts (https://api-contract-watchdog-mock.onrender.com/carts): status_code, contract.\n  - status_code: Expected 200, received 500.\n  - contract: 4 contract validation error(s).\nRECOVERED users (https://api-contract-watchdog-mock.onrender.com/users) after 5m 12s.\nRun: https://github.com/prabhjeet-singh5/api-contract-watchdog/actions",
+  "changes": [
+    {
+      "endpoint": "carts",
+      "url": "https://api-contract-watchdog-mock.onrender.com/carts",
+      "change": "failed",
+      "at": "2026-01-01T12:00:00Z",
+      "failing_since": "2026-01-01T12:00:00Z",
+      "failed_checks": [
+        "status_code",
+        "contract"
+      ],
+      "details": [
+        "status_code: Expected 200, received 500.",
+        "contract: 4 contract validation error(s)."
+      ]
+    },
+    {
+      "endpoint": "users",
+      "url": "https://api-contract-watchdog-mock.onrender.com/users",
+      "change": "recovered",
+      "at": "2026-01-01T12:00:00Z",
+      "failing_since": "2026-01-01T11:54:48Z",
+      "failed_checks": [],
+      "details": []
+    }
+  ]
+}

@@ -3,14 +3,16 @@
 A Python project being built in ten phases. The planned tool will check API
 responses against contracts, describe changes, and alert on failures and recovery.
 
-## Current state: Phase 6 - mock API with controlled breaks
+## Current state: Phase 8 - n8n alert workflow
 
 The checker can call four DummyJSON endpoints, validate response contracts,
 check status codes, measure response times, compare response shapes with
 saved baselines, record each run, and detect when an endpoint starts failing or
-recovers. A local mock API serves the same endpoints and can break them on
+recovers. Each failure or recovery sends one alert to an n8n webhook, with a
+Slack webhook as a fallback. An importable n8n workflow turns each alert into a
+Slack message. A mock API serves the same endpoints and can break them on
 request, so every failure type can be demonstrated. Its tests run offline.
-Alerts, scheduling, and publishing are planned for later phases.
+Scheduling and publishing are planned for later phases.
 
 Requires Python 3.11 or newer.
 
@@ -111,10 +113,10 @@ for the diff; it is excluded from printed JSON and baseline files.
 
 The command prints one JSON run record: a `run_id`, `started_at` and
 `finished_at` timestamps, an overall `passed` flag, the endpoint `results`, and
-the state `changes` described below. Exit codes are `0` when all endpoints pass
-and the run was recorded, `1` when any endpoint fails or the run history could
-not be recorded, and `2` for invalid configuration. Retries and alerts are not
-implemented yet.
+the state `changes` and `alert` outcome described below. Exit codes are `0` when
+all endpoints pass and the run was recorded, `1` when any endpoint fails, the run
+history could not be recorded, or an alert could not be delivered, and `2` for
+invalid configuration. Request retries are not implemented.
 
 ## Response shapes and diffs
 
@@ -198,6 +200,94 @@ unreadable or corrupt `state.json` is not overwritten: the run still prints its
 results, `changes` is `null`, an error goes to stderr, and the exit code is `1`.
 To reset the tracking, move `state.json` aside; the next run starts fresh.
 
+## Alerts
+
+When a run has at least one `failed` or `recovered` change, the watchdog sends one
+alert covering all of them. Runs without changes send nothing, so an endpoint that
+stays broken alerts once when it fails and once when it recovers.
+
+1. If `N8N_WEBHOOK_URL` is set, the full JSON payload is POSTed there.
+2. If n8n is not set, returns a non-2xx status, or cannot be reached, a
+   `{"text": ...}` message is POSTed to `SLACK_WEBHOOK_URL`, if set.
+3. If neither is set, the alert is `skipped`; this is normal for local runs.
+
+The run record's `alert` field shows `sent` (with the `channel`), `skipped`, or
+`failed`; it is `null` when there were no changes. When delivery fails, the run
+exits `1` and state is not saved, so the next run detects the same changes and
+tries the alert again. History still records the failed attempt. Each webhook
+gets one attempt per run, with `REQUEST_TIMEOUT_SECONDS` as its timeout, and
+redirects are not followed.
+
+The n8n payload:
+
+```json
+{
+  "version": 1,
+  "source": "api-contract-watchdog",
+  "run_id": "4f0c...",
+  "run_url": "https://github.com/.../actions/runs/123",
+  "finished_at": "2026-11-11T16:20:00Z",
+  "summary": "1 endpoint(s) failed, 0 recovered.",
+  "text": "API contract watchdog: 1 endpoint(s) failed, 0 recovered.\nFAILED carts (...): status_code, contract, diff.\n  - status_code: Expected 200, received 500.\n...",
+  "changes": [
+    {
+      "endpoint": "carts",
+      "url": "https://api-contract-watchdog-mock.onrender.com/carts",
+      "change": "failed",
+      "at": "2026-11-11T16:20:00Z",
+      "failing_since": "2026-11-11T16:20:00Z",
+      "failed_checks": ["status_code", "contract", "diff"],
+      "details": ["status_code: Expected 200, received 500.", "..."]
+    }
+  ]
+}
+```
+
+`text` is a ready-to-post plain message, the same one Slack receives. A recovery
+reads, for example, `RECOVERED carts (...) after 5m 12s.` `run_url` comes from
+`RUN_URL` and is `null` when unset. Details are the failed checks' messages; alerts
+never contain response bodies. Webhook URLs are secrets: they are never printed,
+written to history, or included in error messages, which name only the channel
+and the HTTP status or error type.
+
+### n8n workflow
+
+`n8n/watchdog_alerts.workflow.json` is a three-node workflow:
+
+1. **Watchdog webhook** receives the alert with `POST`.
+2. **Format Slack message** checks that the body is a version 1 watchdog payload
+   and builds one Slack message: a red line per failure with its details, a green
+   line per recovery with its downtime, and a link to the run.
+3. **Post to Slack** sends that message to a Slack incoming webhook.
+
+The webhook responds only after the last node finishes. If the payload is not a
+watchdog alert or Slack rejects the message, n8n answers with an error, so the
+watchdog falls back to `SLACK_WEBHOOK_URL` instead of losing the alert.
+
+Set it up in n8n (cloud or self-hosted):
+
+1. Create a [Slack incoming webhook](https://api.slack.com/messaging/webhooks)
+   for the channel that should receive alerts.
+2. In n8n, create a workflow and choose **Import from File**, then pick
+   `n8n/watchdog_alerts.workflow.json`.
+3. Open **Post to Slack** and replace the placeholder URL with your Slack webhook URL.
+4. Open **Watchdog webhook** and change the path from `api-contract-watchdog` to a
+   long random value. The webhook has no other authentication, so its URL is the secret.
+5. Save and activate (publish) the workflow, then copy the webhook's **Production URL**
+   into `N8N_WEBHOOK_URL` in `.env`.
+6. Send the sample alert from the repository root:
+
+   ```powershell
+   .\.venv\Scripts\python.exe scripts\send_example_alert.py
+   ```
+
+   It prints `n8n accepted the example alert.` and Slack shows one failure (`carts`)
+   and one recovery (`users`). The script prints only the result, never the URL.
+
+`n8n/example_payload.json` is that sample alert, generated by the watchdog's own
+payload builder. Tests check that it still matches the alert format, and they run
+the workflow's JavaScript with Node.js when it is installed.
+
 ### Checker configuration
 
 The command loads `.env` from the current working directory. Existing environment
@@ -209,6 +299,11 @@ variables take precedence. These settings are active:
 | `REQUEST_TIMEOUT_SECONDS` | `10` | Network inactivity timeout; positive, finite seconds. |
 | `MAX_RESPONSE_TIME_MS` | `2000` | Completed-response limit; positive, finite milliseconds. |
 | `STATE_DIR` | `data` | Directory for baselines, run state, and run history; a relative path is resolved from the working directory. |
+| `N8N_WEBHOOK_URL` | Empty (unset) | n8n webhook that receives the full alert payload. |
+| `SLACK_WEBHOOK_URL` | Empty (unset) | Slack incoming webhook; fallback when n8n is unset or fails. |
+| `RUN_URL` | Empty (unset) | Link to this run, included in alerts; GitHub Actions will set it in Phase 9. |
+
+Blank values count as unset. Set URLs must be valid HTTP/HTTPS URLs.
 
 HTTPX applies the timeout separately to connection, reading, writing, and waiting
 for a connection pool slot. It is not a total request-duration deadline; the
@@ -326,13 +421,14 @@ Redeploys and restarts clear active breaks.
 | `api_contract_watchdog/baselines.py` | Loads versioned baselines and atomically saves passing shapes. |
 | `api_contract_watchdog/tracking.py` | Attaches diffs and preserves the last good baseline on failures. |
 | `api_contract_watchdog/history.py` | Records runs, tracks endpoint state, and detects failures and recoveries. |
+| `api_contract_watchdog/alerts.py` | Builds alert payloads and delivers them to n8n, falling back to Slack. |
 | `api_contract_watchdog/storage.py` | Atomic file replacement shared by the baseline and state stores. |
 | `api_contract_watchdog/contracts/` | Shared validation rules, products, carts, users, and endpoint-to-model mapping. |
-| `tests/` | Offline setup, contract, settings, checker, CLI, diff, baseline, tracking, history, and mock API tests; `fixtures/` holds synthetic JSON samples. |
+| `tests/` | Offline setup, contract, settings, checker, CLI, diff, baseline, tracking, history, alert, n8n workflow, and mock API tests; `fixtures/` holds synthetic JSON samples. |
 | `mock_api/` | FastAPI demo server with admin-controlled breaks; `data/` holds the synthetic responses it serves. |
 | `data/` | Local response baselines and run history; contents are ignored by Git. |
-| `n8n/` | Workflow and example payload, starting in Phase 8. |
-| `scripts/` | Small helper scripts for running demos. |
+| `n8n/` | Importable alert workflow and a sample alert payload. |
+| `scripts/` | Demo helpers; `send_example_alert.py` sends the sample alert to n8n. |
 | `status/` | Status page files, starting in Phase 9. |
 | `docs/` | Demo screenshots and supporting documentation. |
 | `.github/workflows/` | GitHub Actions workflows, starting in Phase 9. |
@@ -346,14 +442,16 @@ Empty folders use `.gitkeep` placeholders so Git can retain them.
 
 ## Configuration and secrets
 
-`.env.example` includes active checker and mock API settings and placeholders for
-later phases. The checker reads only its four variables listed above; the mock API
-reads `MOCK_API_ADMIN_TOKEN`, `MOCK_API_HOST`, and `PORT`. The default
+`.env.example` includes active checker, alert, and mock API settings. The checker
+reads the seven variables listed under checker configuration; the mock API reads
+`MOCK_API_ADMIN_TOKEN`, `MOCK_API_HOST`, and `PORT`. The default
 `data/` directory is ignored by Git; if you choose another state directory inside
 the repository, add that directory to `.gitignore` too.
 Keep real credentials in `.env` locally and in GitHub Actions secrets for CI.
-No accounts, deployed services, or GitHub Secrets are needed for Phase 6; the
-mock API runs locally.
+No accounts or GitHub Secrets are required for Phase 8: without webhooks, alerts
+are skipped. To receive them, import the n8n workflow described under alerts, or
+use a [Slack incoming webhook](https://api.slack.com/messaging/webhooks) directly,
+and put the URL in `.env`.
 
 Later phases will provide exact setup steps for these GitHub Secrets:
 

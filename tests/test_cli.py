@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 from api_contract_watchdog import __main__ as cli
-from api_contract_watchdog.results import CheckOutcome, EndpointResult
+from api_contract_watchdog.results import AlertOutcome, CheckOutcome, EndpointResult
 from api_contract_watchdog.settings import Settings
 
 
@@ -71,3 +71,23 @@ def test_invalid_configuration_exits_before_requests(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "request_timeout_seconds" in captured.err
+
+
+def test_failed_alert_fails_the_run(monkeypatch, capsys, tmp_path):
+    result = EndpointResult(
+        endpoint="demo",
+        url="https://watchdog.invalid/demo",
+        checked_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        response_time_ms=1,
+        checks=[CheckOutcome(check_type="contract", status="failed", message="Simulated.")],
+    )
+    monkeypatch.setattr(cli, "load_settings", lambda: Settings(state_dir=tmp_path))
+    monkeypatch.setattr(cli, "check_all", lambda client, settings: [result])
+    monkeypatch.setattr(cli, "send_alert", lambda client, settings, run: AlertOutcome(
+        status="failed", message="Alert not delivered: n8n: HTTP 500."
+    ))
+    assert cli.main() == 1
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["alert"]["status"] == "failed"
+    assert "Alert not delivered" in captured.err
+    assert not (tmp_path / "state.json").exists()

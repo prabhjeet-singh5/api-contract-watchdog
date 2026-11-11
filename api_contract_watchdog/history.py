@@ -1,5 +1,6 @@
 """Record each run and detect when an endpoint fails or recovers."""
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -7,7 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from .results import EndpointResult
+from .results import AlertOutcome, EndpointResult
 from .storage import write_text_atomic
 
 
@@ -51,6 +52,8 @@ class RunRecord(BaseModel):
     results: list[EndpointResult]
     # None when previous state could not be loaded, so changes are unknown.
     changes: list[StateChange] | None = None
+    # None when there were no changes to alert about.
+    alert: AlertOutcome | None = None
 
     @computed_field
     @property
@@ -130,13 +133,20 @@ class RunStore:
             raise HistoryError(f"Cannot append run history ({type(exc).__name__}).") from exc
 
 
-def record_run(run: RunRecord, store: RunStore) -> None:
-    """Fill in the run's state changes, then persist history and state.
+def record_run(
+    run: RunRecord,
+    store: RunStore,
+    notify: Callable[[RunRecord], AlertOutcome] | None = None,
+) -> None:
+    """Fill in the run's state changes, alert on them, then persist history and state.
 
-    History is appended before state is saved: if either write fails, the next
-    run repeats the same transitions rather than silently missing one.
+    State is saved last, and not at all when an alert fails: the next run then
+    repeats the same transitions (and alert) rather than silently missing one.
     """
     states = store.load_states()
     states, run.changes = track_states(states, run.results)
+    if notify is not None and run.changes:
+        run.alert = notify(run)
     store.append_run(run)
-    store.save_states(states)
+    if run.alert is None or run.alert.status != "failed":
+        store.save_states(states)
