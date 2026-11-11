@@ -287,7 +287,8 @@ curl -X DELETE http://127.0.0.1:8000/admin/breaks -H "Authorization: Bearer $MOC
 
 Breaks are kept in memory: restarting the server clears them, and the server
 must run as a single process so every request sees the same breaks.
-`GET /health` returns `{"status": "ok"}` for hosting health checks.
+`GET /` lists the available endpoints, and `GET /health` returns `{"status": "ok"}`
+for hosting health checks.
 
 | Environment variable | Default | Meaning |
 | --- | --- | --- |

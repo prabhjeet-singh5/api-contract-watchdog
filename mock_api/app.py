@@ -104,6 +104,16 @@ def create_app(admin_token: str | None = None) -> FastAPI:
     for name, (path, items_key, field) in ENDPOINTS.items():
         add_data_route(name, path, items_key, field)
 
+    @app.get("/")
+    def index() -> dict[str, Any]:
+        # A visitor opening the bare URL should see what exists, not a 404.
+        return {
+            "service": "api-contract-watchdog mock API",
+            "endpoints": [path for path, _, _ in ENDPOINTS.values()],
+            "health": "/health",
+            "docs": "/docs",
+        }
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}

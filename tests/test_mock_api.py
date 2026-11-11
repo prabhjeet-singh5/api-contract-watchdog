@@ -24,6 +24,7 @@ def client():
 def test_data_routes_and_health(client):
     for path in ["/products", "/products/1", "/carts", "/users", "/health"]:
         assert client.get(path).status_code == 200
+    assert client.get("/").json()["endpoints"] == ["/products", "/products/1", "/carts", "/users"]
 
 
 @pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer wrong-token-0123456789"}])
