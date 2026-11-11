@@ -38,3 +38,9 @@ class EndpointResult(BaseModel):
     @property
     def passed(self) -> bool:
         return all(check.status != "failed" for check in self.checks)
+
+
+class AlertOutcome(BaseModel):
+    status: Literal["sent", "skipped", "failed"]
+    channel: Literal["n8n", "slack"] | None = None
+    message: str

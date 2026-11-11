@@ -14,7 +14,8 @@ def isolated_environment(monkeypatch, tmp_path):
     monkeypatch.setattr(os, "environ", os.environ.copy())
     monkeypatch.chdir(tmp_path)
     for name in (
-        "DUMMYJSON_BASE_URL", "REQUEST_TIMEOUT_SECONDS", "MAX_RESPONSE_TIME_MS", "STATE_DIR"
+        "DUMMYJSON_BASE_URL", "REQUEST_TIMEOUT_SECONDS", "MAX_RESPONSE_TIME_MS", "STATE_DIR",
+        "N8N_WEBHOOK_URL", "SLACK_WEBHOOK_URL", "RUN_URL",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -80,3 +81,23 @@ def test_invalid_base_url_is_rejected(monkeypatch, value):
     monkeypatch.setenv("DUMMYJSON_BASE_URL", value)
     with pytest.raises(ValidationError):
         load_settings()
+
+
+@pytest.mark.parametrize("name", ["N8N_WEBHOOK_URL", "SLACK_WEBHOOK_URL", "RUN_URL"])
+def test_alert_urls_are_optional_and_blank_means_unset(monkeypatch, name):
+    field = name.lower()
+    assert getattr(load_settings(), field) is None
+    monkeypatch.setenv(name, "  ")
+    assert getattr(load_settings(), field) is None
+    monkeypatch.setenv(name, "https://hooks.invalid/path")
+    assert str(getattr(load_settings(), field)) == "https://hooks.invalid/path"
+
+
+def test_invalid_webhook_is_rejected_without_echoing_it(monkeypatch, capsys):
+    from api_contract_watchdog import __main__ as cli
+
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "not-a-url-SECRET")
+    assert cli.main() == 2
+    captured = capsys.readouterr()
+    assert "slack_webhook_url" in captured.err
+    assert "SECRET" not in captured.err

@@ -14,6 +14,18 @@ class Settings(BaseModel):
     request_timeout_seconds: float = Field(default=10.0, gt=0)
     max_response_time_ms: float = Field(default=2000.0, gt=0)
     state_dir: Path = Path("data")
+    # Webhook URLs are secrets: never print them or copy them into results.
+    n8n_webhook_url: HttpUrl | None = None
+    slack_webhook_url: HttpUrl | None = None
+    run_url: HttpUrl | None = None
+
+    @field_validator("n8n_webhook_url", "slack_webhook_url", "run_url", mode="before")
+    @classmethod
+    def blank_url_is_unset(cls, value):
+        # .env.example ships these blank; blank means "not configured".
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("state_dir", mode="before")
     @classmethod
@@ -41,6 +53,9 @@ def load_settings() -> Settings:
         "request_timeout_seconds": "REQUEST_TIMEOUT_SECONDS",
         "max_response_time_ms": "MAX_RESPONSE_TIME_MS",
         "state_dir": "STATE_DIR",
+        "n8n_webhook_url": "N8N_WEBHOOK_URL",
+        "slack_webhook_url": "SLACK_WEBHOOK_URL",
+        "run_url": "RUN_URL",
     }
     values = {
         field: os.environ[variable]
