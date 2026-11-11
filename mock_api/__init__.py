@@ -1,1 +1,1 @@
-"""Demo API and controlled contract breaks will be added in Phase 6."""
+"""DummyJSON-shaped demo API with admin-controlled contract breaks (Phase 6)."""

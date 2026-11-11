@@ -3,3 +3,9 @@ minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
+filterwarnings = [
+    # The checker passes a timeout; Starlette's in-process TestClient ignores it.
+    "ignore:You should not use the 'timeout' argument with the TestClient:DeprecationWarning",
+    # Raised inside Starlette's TestClient import, not by project code.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]

@@ -1,0 +1,17 @@
+# Render Blueprint for the Phase 6 mock API. Render sets PORT itself.
+services:
+  - type: web
+    name: api-contract-watchdog-mock
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m mock_api
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: MOCK_API_HOST
+        value: 0.0.0.0
+      # Entered in the Render dashboard during setup; never committed.
+      - key: MOCK_API_ADMIN_TOKEN
+        sync: false
