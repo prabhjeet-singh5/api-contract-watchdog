@@ -1,0 +1,37 @@
+{
+  "id": 1,
+  "title": "Demo Notebook",
+  "description": "Synthetic product for offline contract tests.",
+  "category": "stationery",
+  "price": 9.99,
+  "discountPercentage": 10.0,
+  "rating": 4.5,
+  "stock": 12,
+  "tags": ["paper", "notebook"],
+  "brand": "Demo Brand",
+  "sku": "DEMO-001",
+  "weight": 1,
+  "dimensions": {"width": 10.0, "height": 20.0, "depth": 1.5},
+  "warrantyInformation": "No warranty",
+  "shippingInformation": "Ships in 2 days",
+  "availabilityStatus": "In Stock",
+  "reviews": [
+    {
+      "rating": 5,
+      "comment": "Useful notebook.",
+      "date": "2026-01-01T12:00:00Z",
+      "reviewerName": "Demo Reviewer",
+      "reviewerEmail": "reviewer@example.invalid"
+    }
+  ],
+  "returnPolicy": "30 day returns",
+  "minimumOrderQuantity": 1,
+  "meta": {
+    "createdAt": "2026-01-01T12:00:00Z",
+    "updatedAt": "2026-01-02T12:00:00Z",
+    "barcode": "0000000000001",
+    "qrCode": "https://example.invalid/qr.png"
+  },
+  "thumbnail": "https://example.invalid/notebook-thumb.png",
+  "images": ["https://example.invalid/notebook.png"]
+}

@@ -3,13 +3,14 @@
 A Python project being built in ten phases. The planned tool will check API
 responses against contracts, describe changes, and alert on failures and recovery.
 
-## Current state: Phase 5 - run history and state changes
+## Current state: Phase 6 - mock API with controlled breaks
 
 The checker can call four DummyJSON endpoints, validate response contracts,
 check status codes, measure response times, compare response shapes with
 saved baselines, record each run, and detect when an endpoint starts failing or
-recovers. Its tests run offline. Alerts, scheduling, and publishing are planned
-for later phases.
+recovers. A local mock API serves the same endpoints and can break them on
+request, so every failure type can be demonstrated. Its tests run offline.
+Alerts, scheduling, and publishing are planned for later phases.
 
 Requires Python 3.11 or newer.
 
@@ -214,6 +215,103 @@ for a connection pool slot. It is not a total request-duration deadline; the
 response-time check measures the completed request separately.
 [HTTPX timeout documentation](https://www.python-httpx.org/advanced/timeouts/).
 
+## Mock API
+
+`mock_api/` is a small FastAPI server with the same four endpoints as DummyJSON,
+serving the synthetic samples in `mock_api/data/`. An admin can break any
+endpoint on purpose, and the watchdog then reports the failure and, once the
+break is cleared, the recovery.
+
+Start it from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m mock_api
+```
+
+On macOS / Linux, use `.venv/bin/python -m mock_api`. It listens on
+`http://127.0.0.1:8000` and loads `.env` from the working directory. Point the
+checker at it in a second terminal:
+
+```powershell
+$env:DUMMYJSON_BASE_URL = "http://127.0.0.1:8000"
+.\.venv\Scripts\python.exe -m api_contract_watchdog
+```
+
+Baselines and state are keyed by full URL, so mock results never mix with
+DummyJSON results in the same `STATE_DIR`.
+
+### Breaking an endpoint
+
+Admin routes need `Authorization: Bearer <MOCK_API_ADMIN_TOKEN>`. Without a token
+configured, the data routes still work and admin routes return `503`. Tokens
+shorter than 16 characters are rejected at startup. Generate one with
+`python -c "import secrets; print(secrets.token_urlsafe(32))"` and put it in `.env`.
+
+| Route | Effect |
+| --- | --- |
+| `PUT /admin/breaks/{endpoint}` | Break one endpoint. Body: `{"mode": "..."}`; `slow` also accepts `delay_ms`. |
+| `GET /admin/breaks` | List active breaks. |
+| `DELETE /admin/breaks/{endpoint}` | Clear one endpoint's break. |
+| `DELETE /admin/breaks` | Clear every break. |
+
+`{endpoint}` is `products`, `single_product`, `carts`, or `users`. Breaks target
+`price` for products, `total` for carts, and `age` for users, in every item.
+
+| Mode | Response | Watchdog result |
+| --- | --- | --- |
+| `remove_field` | Target field missing | `contract` and `diff` fail. |
+| `type_change` | Target number sent as a string | `contract` and `diff` fail. |
+| `new_null` | Target field is `null` | `contract` and `diff` fail. |
+| `added_field` | Adds `mockExtra` to each item | Passes; reported in `added_fields`. |
+| `server_error` | HTTP `500` with an error body | `status_code`, `contract`, and `diff` fail. |
+| `invalid_json` | Malformed JSON body | `contract` fails; the diff is skipped. |
+| `slow` | Correct body after `delay_ms` (default 3000, max 10000) | `response_time` fails. |
+
+PowerShell example:
+
+```powershell
+$headers = @{ Authorization = "Bearer $env:MOCK_API_ADMIN_TOKEN" }
+Invoke-RestMethod -Method Put -Uri http://127.0.0.1:8000/admin/breaks/users `
+  -Headers $headers -ContentType application/json -Body '{"mode": "type_change"}'
+Invoke-RestMethod -Method Delete -Uri http://127.0.0.1:8000/admin/breaks -Headers $headers
+```
+
+curl example:
+
+```bash
+curl -X PUT http://127.0.0.1:8000/admin/breaks/users \
+  -H "Authorization: Bearer $MOCK_API_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" -d '{"mode": "type_change"}'
+curl -X DELETE http://127.0.0.1:8000/admin/breaks -H "Authorization: Bearer $MOCK_API_ADMIN_TOKEN"
+```
+
+Breaks are kept in memory: restarting the server clears them, and the server
+must run as a single process so every request sees the same breaks.
+`GET /health` returns `{"status": "ok"}` for hosting health checks.
+
+| Environment variable | Default | Meaning |
+| --- | --- | --- |
+| `MOCK_API_ADMIN_TOKEN` | Empty (admin disabled) | Bearer token for admin routes; at least 16 characters. |
+| `MOCK_API_HOST` | `127.0.0.1` | Interface to listen on; hosting platforms usually need `0.0.0.0`. |
+| `PORT` | `8000` | Port to listen on; most hosting platforms set this automatically. |
+
+### Deploying to Render
+
+`render.yaml` describes a free Render web service for the mock API.
+
+1. In the [Render dashboard](https://dashboard.render.com/), choose
+   **New > Blueprint** and connect this GitHub repository's `main` branch.
+2. When prompted, enter a generated `MOCK_API_ADMIN_TOKEN`. Keep a copy in your
+   local `.env`; Render stores the deployed copy.
+3. Apply the Blueprint. When the deploy finishes, open
+   `https://<service>.onrender.com/health` to confirm it returns `{"status": "ok"}`.
+4. Put that base URL in `MOCK_API_BASE_URL` in `.env`.
+
+Free Render services sleep after a period without traffic, and the first request
+afterwards can take far longer than `MAX_RESPONSE_TIME_MS`. Wake the service with
+`/health` before a demo, or expect a `response_time` failure on the first run.
+Redeploys and restarts clear active breaks.
+
 ## Files and folders
 
 | Path | Purpose |
@@ -229,8 +327,8 @@ response-time check measures the completed request separately.
 | `api_contract_watchdog/history.py` | Records runs, tracks endpoint state, and detects failures and recoveries. |
 | `api_contract_watchdog/storage.py` | Atomic file replacement shared by the baseline and state stores. |
 | `api_contract_watchdog/contracts/` | Shared validation rules, products, carts, users, and endpoint-to-model mapping. |
-| `tests/` | Offline setup, contract, settings, checker, CLI, diff, baseline, tracking, and history tests; `fixtures/` holds synthetic JSON samples. |
-| `mock_api/` | FastAPI demo server, starting in Phase 6. |
+| `tests/` | Offline setup, contract, settings, checker, CLI, diff, baseline, tracking, history, and mock API tests; `fixtures/` holds synthetic JSON samples. |
+| `mock_api/` | FastAPI demo server with admin-controlled breaks; `data/` holds the synthetic responses it serves. |
 | `data/` | Local response baselines and run history; contents are ignored by Git. |
 | `n8n/` | Workflow and example payload, starting in Phase 8. |
 | `scripts/` | Small helper scripts for running demos. |
@@ -238,20 +336,23 @@ response-time check measures the completed request separately.
 | `docs/` | Demo screenshots and supporting documentation. |
 | `.github/workflows/` | GitHub Actions workflows, starting in Phase 9. |
 | `requirements.txt` | Exact versions for the project's direct dependencies. |
-| `pyproject.toml` | Pytest configuration. |
+| `pyproject.toml` | Pytest configuration, including filters for two known Starlette test-client warnings. |
 | `.env.example` | Configuration template with empty secret values. |
+| `render.yaml` | Render Blueprint for deploying the mock API. |
 | `.gitignore` | Excludes credentials, the virtual environment, and generated files. |
 
 Empty folders use `.gitkeep` placeholders so Git can retain them.
 
 ## Configuration and secrets
 
-`.env.example` includes active checker settings and placeholders for later phases.
-The checker currently reads only the four variables listed above. The default
+`.env.example` includes active checker and mock API settings and placeholders for
+later phases. The checker reads only its four variables listed above; the mock API
+reads `MOCK_API_ADMIN_TOKEN`, `MOCK_API_HOST`, and `PORT`. The default
 `data/` directory is ignored by Git; if you choose another state directory inside
 the repository, add that directory to `.gitignore` too.
 Keep real credentials in `.env` locally and in GitHub Actions secrets for CI.
-No accounts, deployed services, or GitHub Secrets are needed for Phase 5.
+No accounts, deployed services, or GitHub Secrets are needed for Phase 6; the
+mock API runs locally.
 
 Later phases will provide exact setup steps for these GitHub Secrets:
 
@@ -260,5 +361,5 @@ Later phases will provide exact setup steps for these GitHub Secrets:
 - `N8N_WEBHOOK_URL`: the n8n production webhook URL.
 - `SLACK_WEBHOOK_URL`: the fallback Slack incoming webhook URL.
 
-The mock API server will also need `MOCK_API_ADMIN_TOKEN` in its hosting
-environment. Do not put tokens or webhook URLs in source code or screenshots.
+A deployed mock API also needs `MOCK_API_ADMIN_TOKEN` and `MOCK_API_HOST=0.0.0.0`
+in its hosting environment. Do not put tokens or webhook URLs in source code or screenshots.
